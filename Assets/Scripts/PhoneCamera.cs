@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using Barracuda;
+using Unity.Barracuda;
 using TFClassify;
 using UnityEngine;
 using System.Linq;
@@ -233,7 +233,7 @@ public class PhoneCamera : MonoBehaviour
     private Color32[] Rotate(Color32[] pixels, int width, int height)
     {
         return TextureTools.RotateImageMatrix(
-                pixels, width, height, -90);
+                pixels, width, height, 180);
     }
 
     private Task<Texture2D> RotateAsync(Texture2D texture)

@@ -1,5 +1,5 @@
 using System;
-using Barracuda;
+using Unity.Barracuda;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 using System.Linq;
@@ -65,7 +65,8 @@ public class Detector : MonoBehaviour
         {
             var inputs = new Dictionary<string, Tensor>();
             inputs.Add(INPUT_NAME, tensor);
-            yield return StartCoroutine(worker.ExecuteAsync(inputs));
+            //yield return StartCoroutine(worker.ExecuteAsync(inputs));
+            worker.Execute(inputs);
 
             var output = worker.PeekOutput(OUTPUT_NAME);
             var results = ParseOutputs(output);
@@ -73,6 +74,8 @@ public class Detector : MonoBehaviour
 
             callback(boxes);
         }
+
+        yield break;
     }
 
 
