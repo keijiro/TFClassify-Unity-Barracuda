@@ -13,27 +13,17 @@ public class Detector : MonoBehaviour
     public NNModel modelFile;
     public TextAsset labelsFile;
 
-
-    // for .nn model
-    // private static int IMAGE_MEAN = 0;
-    // private static float IMAGE_STD = 255f;
-    // private const string INPUT_NAME = "input_1";
-    // private const string OUTPUT_NAME = "conv2d_9/BiasAdd";
-
-
-    // for .onnx model
-    private const int IMAGE_MEAN = 0;
-    private const float IMAGE_STD = 1f;
-    private const string INPUT_NAME = "image";
-    private const string OUTPUT_NAME = "grid";
+    const int IMAGE_MEAN = 0;
+    const float IMAGE_STD = 1f;
+    const string INPUT_NAME = "image";
+    const string OUTPUT_NAME = "grid";
 
     public const int IMAGE_SIZE = 416;
     
     // Minimum detection confidence to track a detection.
-    private const float MINIMUM_CONFIDENCE = 0.3f;
+    const float MINIMUM_CONFIDENCE = 0.3f;
 
-    private IWorker worker;
-
+    IWorker worker;
 
     public const int ROW_COUNT = 13;
     public const int COL_COUNT = 13;
@@ -42,9 +32,9 @@ public class Detector : MonoBehaviour
     public const int CLASS_COUNT = 20;
     public const float CELL_WIDTH = 32;
     public const float CELL_HEIGHT = 32;
-    private string[] labels;
+    string[] labels;
 
-    private float[] anchors = new float[]
+    float[] anchors = new float[]
     {
         1.08F, 1.19F, 3.42F, 4.41F, 6.63F, 11.38F, 9.42F, 5.11F, 16.62F, 10.52F
     };

@@ -18,7 +18,6 @@ public class PhoneCamera : MonoBehaviour
     private float shiftX = 0f;
     private float shiftY = 0f;
     private float scaleFactor = 1;
-    private bool camAvailable;
 
     private WebCamTexture backCamera;
     private Texture defaultBackground;
@@ -39,7 +38,6 @@ public class PhoneCamera : MonoBehaviour
         this.backCamera = new WebCamTexture();
         this.background.texture = this.backCamera;
         this.backCamera.Play();
-        camAvailable = true;
 
         boxOutlineTexture = new Texture2D(1, 1);
         boxOutlineTexture.SetPixel(0, 0, Color.red);
@@ -55,11 +53,6 @@ public class PhoneCamera : MonoBehaviour
 
     private void Update()
     {
-        if (!this.camAvailable)
-        {
-            return;
-        }
-
         float ratio = (float)backCamera.width / (float)backCamera.height;
         fitter.aspectRatio = ratio;
 
