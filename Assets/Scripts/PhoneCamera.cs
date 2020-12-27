@@ -9,12 +9,6 @@ using System.Collections;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-public enum Mode
-{
-    Detect,
-    Classify,
-}
-
 public class PhoneCamera : MonoBehaviour
 {
     private static Texture2D boxOutlineTexture;
@@ -30,13 +24,11 @@ public class PhoneCamera : MonoBehaviour
     private Texture defaultBackground;
 
     private bool isWorking = false;
-    public Classifier classifier;
     public Detector detector;
 
     private IList<BoundingBox> boxOutlines;
 
 
-    public Mode mode;
     public RawImage background;
     public AspectRatioFitter fitter;
     public Text uiText;
@@ -57,7 +49,7 @@ public class PhoneCamera : MonoBehaviour
         labelStyle.fontSize = 50;
         labelStyle.normal.textColor = Color.red;
 
-        CalculateShift(this.mode == Mode.Detect ? Detector.IMAGE_SIZE : Classifier.IMAGE_SIZE);
+        CalculateShift(Detector.IMAGE_SIZE);
     }
 
 
@@ -83,14 +75,7 @@ public class PhoneCamera : MonoBehaviour
             this.cameraScale = (float)Screen.width / Screen.height;
         }
 
-        if (this.mode == Mode.Detect)
-        {
-            TFDetect();
-        }
-        else
-        {
-            TFClassify();
-        }
+        TFDetect();
     }
 
 
@@ -122,35 +107,6 @@ public class PhoneCamera : MonoBehaviour
         }
 
         this.scaleFactor = smallest / (float)inputSize;
-    }
-
-
-    private void TFClassify()
-    {
-        if (this.isWorking)
-        {
-            return;
-        }
-
-        this.isWorking = true;
-        StartCoroutine(ProcessImage(Classifier.IMAGE_SIZE, result =>
-        {
-            StartCoroutine(this.classifier.Classify(result, probabilities =>
-            {
-                this.uiText.text = String.Empty;
-
-                if (probabilities.Any())
-                {
-                    for (int i = 0; i < 3; i++)
-                    {
-                        this.uiText.text += probabilities[i].Key + ": " + String.Format("{0:0.000}%", probabilities[i].Value) + "\n";
-                    }
-                }
-
-                Resources.UnloadUnusedAssets();
-                this.isWorking = false;
-            }));
-        }));
     }
 
 
