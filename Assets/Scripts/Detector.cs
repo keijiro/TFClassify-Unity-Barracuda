@@ -6,6 +6,7 @@ using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Unity.Collections;
 
 
 public class Detector : MonoBehaviour
@@ -48,8 +49,39 @@ public class Detector : MonoBehaviour
         this.worker = WorkerFactory.CreateWorker(WorkerFactory.Type.ComputePrecompiled, model);
     }
 
+    bool _working;
+    int _lastFrame;
 
-    public IEnumerator Detect(Color32[] picture, System.Action<IList<BoundingBox>> callback)
+
+    public void IssueDetection(NativeArray<Color32> picture)
+    {
+        if (_working) return;
+
+        using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
+        {
+            var inputs = new Dictionary<string, Tensor>();
+            inputs.Add(INPUT_NAME, tensor);
+            worker.Execute(inputs);
+            worker.FlushSchedule();
+        }
+
+        _working = true;
+        _lastFrame = Time.frameCount;
+    }
+
+    public void RetrieveResults(System.Action<IList<BoundingBox>> callback)
+    {
+        if (_lastFrame == Time.frameCount) return;
+
+        var output = worker.PeekOutput(OUTPUT_NAME);
+        var results = ParseOutputs(output);
+        var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
+        callback(boxes);
+
+        _working = false;
+    }
+    /*
+    public void Detect(NativeArray<Color32> picture, System.Action<IList<BoundingBox>> callback)
     {
         using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
         {
@@ -64,12 +96,11 @@ public class Detector : MonoBehaviour
 
             callback(boxes);
         }
-
-        yield break;
     }
+    */
 
 
-    public static Tensor TransformInput(Color32[] pic, int width, int height)
+    public static Tensor TransformInput(NativeArray<Color32> pic, int width, int height)
     {
         float[] floatValues = new float[width * height * 3];
 

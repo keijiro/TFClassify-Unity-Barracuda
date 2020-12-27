@@ -32,6 +32,7 @@ public class PhoneCamera : MonoBehaviour
     public AspectRatioFitter fitter;
     public Text uiText;
 
+#if DO_NOT_COMPILE
 
     private void Start()
     {
@@ -200,4 +201,5 @@ public class PhoneCamera : MonoBehaviour
         File.WriteAllBytes(
             filePath, texture.EncodeToPNG());
     }
+#endif
 }
