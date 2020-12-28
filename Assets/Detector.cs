@@ -8,14 +8,24 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Unity.Collections;
 
-
-public class Detector : MonoBehaviour
+public class Detector : System.IDisposable
 {
-    public NNModel modelFile;
-    public TextAsset labelsFile;
+    IWorker _worker;
 
-    const int IMAGE_MEAN = 0;
-    const float IMAGE_STD = 1f;
+    public Detector(NNModel model)
+      => _worker = ModelLoader.Load(model).CreateWorker();
+
+    public void Dispose()
+    {
+        _worker?.Dispose();
+        _worker = null;
+    }
+
+
+
+
+
+
     const string INPUT_NAME = "image";
     const string OUTPUT_NAME = "grid";
 
@@ -24,7 +34,6 @@ public class Detector : MonoBehaviour
     // Minimum detection confidence to track a detection.
     const float MINIMUM_CONFIDENCE = 0.3f;
 
-    IWorker worker;
 
     public const int ROW_COUNT = 13;
     public const int COL_COUNT = 13;
@@ -33,7 +42,6 @@ public class Detector : MonoBehaviour
     public const int CLASS_COUNT = 20;
     public const float CELL_WIDTH = 32;
     public const float CELL_HEIGHT = 32;
-    string[] labels;
 
     float[] anchors = new float[]
     {
@@ -41,13 +49,6 @@ public class Detector : MonoBehaviour
     };
 
 
-    public void Start()
-    {
-        this.labels = Regex.Split(this.labelsFile.text, "\n|\r|\r\n")
-            .Where(s => !String.IsNullOrEmpty(s)).ToArray();
-        var model = ModelLoader.Load(this.modelFile);
-        this.worker = WorkerFactory.CreateWorker(WorkerFactory.Type.ComputePrecompiled, model);
-    }
 
     bool _working;
     int _lastFrame;
@@ -61,8 +62,8 @@ public class Detector : MonoBehaviour
         {
             var inputs = new Dictionary<string, Tensor>();
             inputs.Add(INPUT_NAME, tensor);
-            worker.Execute(inputs);
-            worker.FlushSchedule();
+            _worker.Execute(inputs);
+            _worker.FlushSchedule();
         }
 
         _working = true;
@@ -73,7 +74,7 @@ public class Detector : MonoBehaviour
     {
         if (_lastFrame == Time.frameCount) return;
 
-        var output = worker.PeekOutput(OUTPUT_NAME);
+        var output = _worker.PeekOutput(OUTPUT_NAME);
         var results = ParseOutputs(output);
         var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
         callback(boxes);
@@ -107,10 +108,9 @@ public class Detector : MonoBehaviour
         for (int i = 0; i < pic.Length; ++i)
         {
             var color = pic[i];
-
-            floatValues[i * 3 + 0] = (color.r - IMAGE_MEAN) / IMAGE_STD;
-            floatValues[i * 3 + 1] = (color.g - IMAGE_MEAN) / IMAGE_STD;
-            floatValues[i * 3 + 2] = (color.b - IMAGE_MEAN) / IMAGE_STD;
+            floatValues[i * 3 + 0] = color.r;
+            floatValues[i * 3 + 1] = color.g;
+            floatValues[i * 3 + 2] = color.b;
         }
 
         return new Tensor(1, height, width, 3, floatValues);
@@ -155,8 +155,7 @@ public class Detector : MonoBehaviour
                             Width = mappedBoundingBox.Width,
                             Height = mappedBoundingBox.Height,
                         },
-                        Confidence = topScore,
-                        Label = labels[topResultIndex]
+                        Confidence = topScore
                     });
                 }
             }
@@ -331,8 +330,6 @@ public class BoundingBox
 {
     public BoundingBoxDimensions Dimensions { get; set; }
 
-    public string Label { get; set; }
-
     public float Confidence { get; set; }
 
     public Rect Rect
@@ -342,6 +339,6 @@ public class BoundingBox
 
     public override string ToString()
     {
-        return $"{Label}:{Confidence}, {Dimensions.X}:{Dimensions.Y} - {Dimensions.Width}:{Dimensions.Height}";
+        return $"{Confidence}, {Dimensions.X}:{Dimensions.Y} - {Dimensions.Width}:{Dimensions.Height}";
     }
 }

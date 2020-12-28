@@ -1,17 +1,19 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Barracuda = Unity.Barracuda;
 
 sealed class CameraController : MonoBehaviour
 {
     [SerializeField] UnityEngine.UI.RawImage _display = null;
-    [SerializeField] Detector _detector = null;
+    [SerializeField] Barracuda.NNModel _model = null;
 
     [SerializeField] Mesh _mesh = null;
     [SerializeField] Material _material = null;
 
     WebCamTexture _webcam;
     RenderTexture _cropped;
+    Detector _detector;
 
     Queue<Matrix4x4> _boxes = new Queue<Matrix4x4>();
 
@@ -25,6 +27,14 @@ sealed class CameraController : MonoBehaviour
           (width, width, 0, RenderTextureFormat.ARGB32);
 
         _display.texture = _cropped;
+
+        _detector = new Detector(_model);
+    }
+
+    void OnDisable()
+    {
+        _detector?.Dispose();
+        _detector = null;
     }
 
     void Update()
@@ -57,6 +67,6 @@ sealed class CameraController : MonoBehaviour
     void OnCompleteReadback(AsyncGPUReadbackRequest request)
     {
          if (request.hasError) return;
-         _detector.IssueDetection(request.GetData<Color32>());
+         _detector?.IssueDetection(request.GetData<Color32>());
     }
 }
