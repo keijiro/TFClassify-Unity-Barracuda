@@ -1,16 +1,22 @@
-using System;
 using Unity.Barracuda;
-using UnityEngine;
-using Debug = UnityEngine.Debug;
-using System.Linq;
-using System.Collections;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using Unity.Collections;
+using System.Linq;
+using System.Collections.Generic;
 
-public class Detector : System.IDisposable
+using Math = System.Math;
+using Rect = UnityEngine.Rect;
+using Color32 = UnityEngine.Color32;
+using Time = UnityEngine.Time;
+
+sealed class Detector : System.IDisposable
 {
+    #region NN worker objects
+
     IWorker _worker;
+
+    #endregion
+
+    #region Object lifecycle
 
     public Detector(NNModel model)
       => _worker = ModelLoader.Load(model).CreateWorker();
@@ -20,6 +26,44 @@ public class Detector : System.IDisposable
         _worker?.Dispose();
         _worker = null;
     }
+
+    #endregion
+
+    #region Public interface
+
+    bool _working;
+    int _lastFrame;
+
+    public void IssueDetection(NativeArray<Color32> picture)
+    {
+        if (_working) return;
+
+        using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
+        {
+            var inputs = new Dictionary<string, Tensor>();
+            inputs.Add(INPUT_NAME, tensor);
+            _worker.Execute(inputs);
+            _worker.FlushSchedule();
+        }
+
+        _working = true;
+        _lastFrame = Time.frameCount;
+    }
+
+    public void RetrieveResults(System.Action<IList<BoundingBox>> callback)
+    {
+        if (_lastFrame == Time.frameCount) return;
+
+        var output = _worker.PeekOutput(OUTPUT_NAME);
+        var results = ParseOutputs(output);
+        var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
+        callback(boxes);
+
+        _working = false;
+    }
+
+    #endregion
+
 
 
 
@@ -49,56 +93,6 @@ public class Detector : System.IDisposable
     };
 
 
-
-    bool _working;
-    int _lastFrame;
-
-
-    public void IssueDetection(NativeArray<Color32> picture)
-    {
-        if (_working) return;
-
-        using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
-        {
-            var inputs = new Dictionary<string, Tensor>();
-            inputs.Add(INPUT_NAME, tensor);
-            _worker.Execute(inputs);
-            _worker.FlushSchedule();
-        }
-
-        _working = true;
-        _lastFrame = Time.frameCount;
-    }
-
-    public void RetrieveResults(System.Action<IList<BoundingBox>> callback)
-    {
-        if (_lastFrame == Time.frameCount) return;
-
-        var output = _worker.PeekOutput(OUTPUT_NAME);
-        var results = ParseOutputs(output);
-        var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
-        callback(boxes);
-
-        _working = false;
-    }
-    /*
-    public void Detect(NativeArray<Color32> picture, System.Action<IList<BoundingBox>> callback)
-    {
-        using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
-        {
-            var inputs = new Dictionary<string, Tensor>();
-            inputs.Add(INPUT_NAME, tensor);
-            //yield return StartCoroutine(worker.ExecuteAsync(inputs));
-            worker.Execute(inputs);
-
-            var output = worker.PeekOutput(OUTPUT_NAME);
-            var results = ParseOutputs(output);
-            var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
-
-            callback(boxes);
-        }
-    }
-    */
 
 
     public static Tensor TransformInput(NativeArray<Color32> pic, int width, int height)
@@ -227,7 +221,7 @@ public class Detector : System.IDisposable
     }
 
 
-    private ValueTuple<int, float> GetTopResult(float[] predictedClasses)
+    private (int, float) GetTopResult(float[] predictedClasses)
     {
         return predictedClasses
             .Select((predictedClass, index) => (Index: index, Value: predictedClass))
