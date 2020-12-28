@@ -31,35 +31,23 @@ sealed class Detector : System.IDisposable
 
     #region Public interface
 
-    bool _working;
-    int _lastFrame;
-
-    public void IssueDetection(NativeArray<Color32> picture)
+    public void StartDetection(NativeArray<Color32> input)
     {
-        if (_working) return;
-
-        using (var tensor = TransformInput(picture, IMAGE_SIZE, IMAGE_SIZE))
+        using (var tensor = TransformInput(input, IMAGE_SIZE, IMAGE_SIZE))
         {
             var inputs = new Dictionary<string, Tensor>();
             inputs.Add(INPUT_NAME, tensor);
             _worker.Execute(inputs);
             _worker.FlushSchedule();
         }
-
-        _working = true;
-        _lastFrame = Time.frameCount;
     }
 
     public void RetrieveResults(System.Action<IList<BoundingBox>> callback)
     {
-        if (_lastFrame == Time.frameCount) return;
-
         var output = _worker.PeekOutput(OUTPUT_NAME);
         var results = ParseOutputs(output);
         var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
         callback(boxes);
-
-        _working = false;
     }
 
     #endregion
