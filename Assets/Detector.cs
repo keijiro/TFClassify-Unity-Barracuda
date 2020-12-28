@@ -3,6 +3,7 @@ using Unity.Collections;
 using System.Linq;
 using System.Collections.Generic;
 
+using ComputeBuffer = UnityEngine.ComputeBuffer;
 using Math = System.Math;
 using Rect = UnityEngine.Rect;
 using Color32 = UnityEngine.Color32;
@@ -31,12 +32,11 @@ sealed class Detector : System.IDisposable
 
     #region Public interface
 
-    public void StartDetection(NativeArray<Color32> input)
+    public void StartDetection(ComputeBuffer image)
     {
-        using (var tensor = TransformInput(input, IMAGE_SIZE, IMAGE_SIZE))
+        using (var tensor = new Tensor(1, IMAGE_SIZE, IMAGE_SIZE, 3, image))
         {
-            var inputs = new Dictionary<string, Tensor>();
-            inputs.Add(INPUT_NAME, tensor);
+            var inputs = new Dictionary<string, Tensor> {{ INPUT_NAME, tensor }};
             _worker.Execute(inputs);
             _worker.FlushSchedule();
         }
@@ -44,6 +44,7 @@ sealed class Detector : System.IDisposable
 
     public void RetrieveResults(System.Action<IList<BoundingBox>> callback)
     {
+        if (_worker.scheduleProgress < 1) return;
         var output = _worker.PeekOutput(OUTPUT_NAME);
         var results = ParseOutputs(output);
         var boxes = FilterBoundingBoxes(results, 5, MINIMUM_CONFIDENCE);
@@ -79,25 +80,6 @@ sealed class Detector : System.IDisposable
     {
         1.08F, 1.19F, 3.42F, 4.41F, 6.63F, 11.38F, 9.42F, 5.11F, 16.62F, 10.52F
     };
-
-
-
-
-    public static Tensor TransformInput(NativeArray<Color32> pic, int width, int height)
-    {
-        float[] floatValues = new float[width * height * 3];
-
-        for (int i = 0; i < pic.Length; ++i)
-        {
-            var color = pic[i];
-            floatValues[i * 3 + 0] = color.r;
-            floatValues[i * 3 + 1] = color.g;
-            floatValues[i * 3 + 2] = color.b;
-        }
-
-        return new Tensor(1, height, width, 3, floatValues);
-    }
-
 
     private IList<BoundingBox> ParseOutputs(Tensor yoloModelOutput, float threshold = .3F)
     {

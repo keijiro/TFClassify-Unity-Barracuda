@@ -1,35 +1,41 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
-using Barracuda = Unity.Barracuda;
+using Unity.Mathematics;
 
 sealed class CameraController : MonoBehaviour
 {
-    [SerializeField] Barracuda.NNModel _model = null;
     [SerializeField] UnityEngine.UI.RawImage _display = null;
 
+    [SerializeField, HideInInspector] Unity.Barracuda.NNModel _model = null;
+    [SerializeField, HideInInspector] ComputeShader _converter = null;
     [SerializeField, HideInInspector] Mesh _mesh = null;
-    [SerializeField, HideInInspector] Material _material = null;
+    [SerializeField, HideInInspector] Shader _shader;
+
+    const int Size = Detector.IMAGE_SIZE;
 
     WebCamTexture _webcam;
     RenderTexture _cropped;
+    ComputeBuffer _buffer;
     Detector _detector;
-    int _lastFrame = -1;
+    Material _material;
 
     void Start()
     {
         _webcam = new WebCamTexture();
         _webcam.Play();
 
-        var size = Detector.IMAGE_SIZE;
-        _cropped = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32);
-        _display.texture = _cropped;
+        _display.texture = _cropped = new RenderTexture(Size, Size, 0);
+        _buffer = new ComputeBuffer(Size * Size * 3, sizeof(float));
 
         _detector = new Detector(_model);
+        _material = new Material(_shader);
     }
 
     void OnDisable()
     {
+        _buffer?.Dispose();
+        _buffer = null;
+
         _detector?.Dispose();
         _detector = null;
     }
@@ -38,36 +44,28 @@ sealed class CameraController : MonoBehaviour
     {
         if (_webcam != null) Destroy(_webcam);
         if (_cropped != null) Destroy(_cropped);
+        if (_material != null) Destroy(_material);
     }
 
     void Update()
     {
-        // Retrieve results from the detector if it's ready.
-        var frame = Time.frameCount;
-        if (_lastFrame >= 0 && Time.frameCount - _lastFrame > 1)
-        {
-            _detector.RetrieveResults(DrawBoundingBoxes);
-            _lastFrame = -1;
-        }
+        // Retrieve the last results and draw the bounding boxes.
+        _detector.RetrieveResults(DrawBoundingBoxes);
 
         // Input image cropping
         var aspect = (float)_webcam.height / _webcam.width;
-        var scale = new Vector2(-aspect, -1);
-        var offset = new Vector2(1 - aspect / 2, 1);
+        var scale = new Vector2(aspect, 1);
+        var offset = new Vector2(aspect / 2, 0);
         Graphics.Blit(_webcam, _cropped, scale, offset);
 
-        // Async readback request
-        AsyncGPUReadback.Request
-          (_cropped, 0, TextureFormat.RGBA32, OnCompleteReadback);
-    }
+        // Image to tensor conversion
+        _converter.SetTexture(0, "_Image", _cropped);
+        _converter.SetBuffer(0, "_Tensor", _buffer);
+        _converter.SetInt("_Width", Size);
+        _converter.Dispatch(0, Size / 8, Size / 8, 1);
 
-    void OnCompleteReadback(AsyncGPUReadbackRequest request)
-    {
-         if (!request.hasError && _lastFrame < 0)
-         {
-             _detector?.StartDetection(request.GetData<Color32>());
-             _lastFrame = Time.frameCount;
-         }
+        // Detection start
+        _detector.StartDetection(_buffer);
     }
 
     void DrawBoundingBoxes(IList<BoundingBox> boxes)
@@ -75,11 +73,15 @@ sealed class CameraController : MonoBehaviour
         foreach (var box in boxes)
         {
             var dim = box.Dimensions;
-            var rcp = 1.0f / Detector.IMAGE_SIZE;
-            var scale = new Vector3(dim.Width * rcp, dim.Height * rcp, 0);
-            var pos = new Vector3(dim.X * rcp, dim.Y * rcp, 0) + scale / 2;
-            var matrix = Matrix4x4.TRS(pos, Quaternion.identity, scale);
-            Graphics.DrawMesh(_mesh, matrix, _material, 0);
+
+            var t = math.float3(dim.X, dim.Y, 0);
+            var r = quaternion.identity;
+            var s = math.float3(dim.Width, dim.Height, 1);
+
+            t.xy = math.float2(1, -1) * ((t.xy + s.xy / 2) / Size - 0.5f);
+            s.xy /= Size;
+
+            Graphics.DrawMesh(_mesh, float4x4.TRS(t, r, s), _material, 0);
         }
     }
 }
